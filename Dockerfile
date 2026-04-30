@@ -28,9 +28,11 @@ ARG BUILD_DATE=unknown
 
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X 'main.Version=${VERSION}' -X 'main.Commit=${COMMIT}' -X 'main.BuildDate=${BUILD_DATE}'" -o ./CLIProxyAPI ./cmd/server/
 
-FROM alpine:3.22.0
+FROM debian:bookworm-slim
 
-RUN apk add --no-cache tzdata bash curl libstdc++ libgcc gcompat
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends tzdata bash curl libstdc++6 libgcc-s1 ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 # Install cursor-agent CLI
 ARG CURSOR_AGENT_VERSION=2026.04.29-c83a488
