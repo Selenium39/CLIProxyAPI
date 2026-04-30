@@ -7,8 +7,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
@@ -187,8 +191,10 @@ func (e *CursorExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.A
 	return &cliproxyexecutor.StreamResult{Chunks: out}, nil
 }
 
-func (e *CursorExecutor) buildCommand(ctx context.Context, _ *cliproxyauth.Auth, model, prompt string) (*exec.Cmd, error) {
+func (e *CursorExecutor) buildCommand(ctx context.Context, auth *cliproxyauth.Auth, model, prompt string) (*exec.Cmd, error) {
 	bin := "cursor-agent"
+
+	ensureCursorAgentAuth(auth)
 
 	args := []string{
 		"-p",
@@ -204,6 +210,72 @@ func (e *CursorExecutor) buildCommand(ctx context.Context, _ *cliproxyauth.Auth,
 
 	args = append(args, prompt)
 	return exec.CommandContext(ctx, bin, args...), nil
+}
+
+var cursorAuthOnce sync.Once
+
+// ensureCursorAgentAuth writes the OAuth access/refresh tokens from the proxy's
+// auth store into cursor-agent's native auth.json so that cursor-agent can
+// authenticate without a separate interactive login.
+func ensureCursorAgentAuth(auth *cliproxyauth.Auth) {
+	if auth == nil || auth.Metadata == nil {
+		return
+	}
+	accessToken, _ := auth.Metadata["access_token"].(string)
+	if strings.TrimSpace(accessToken) == "" {
+		return
+	}
+	refreshToken, _ := auth.Metadata["refresh_token"].(string)
+
+	cursorAuthOnce.Do(func() {
+		authPath := cursorAgentAuthFilePath()
+		if _, err := os.Stat(authPath); err == nil {
+			return
+		}
+
+		dir := filepath.Dir(authPath)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			log.Errorf("cursor executor: failed to create auth dir %s: %v", dir, err)
+			return
+		}
+
+		data := map[string]any{
+			"accessToken":        accessToken,
+			"refreshToken":       refreshToken,
+			"apiKey":             nil,
+			"bedrockCredentials": nil,
+		}
+		content, err := json.MarshalIndent(data, "", "  ")
+		if err != nil {
+			log.Errorf("cursor executor: failed to marshal auth data: %v", err)
+			return
+		}
+		if err := os.WriteFile(authPath, content, 0600); err != nil {
+			log.Errorf("cursor executor: failed to write auth file %s: %v", authPath, err)
+			return
+		}
+		log.Infof("cursor executor: wrote auth credentials to %s", authPath)
+	})
+}
+
+func cursorAgentAuthFilePath() string {
+	home, _ := os.UserHomeDir()
+	switch runtime.GOOS {
+	case "darwin":
+		return filepath.Join(home, ".cursor", "auth.json")
+	case "windows":
+		appData := os.Getenv("APPDATA")
+		if appData == "" {
+			appData = filepath.Join(home, "AppData", "Roaming")
+		}
+		return filepath.Join(appData, "Cursor", "auth.json")
+	default:
+		configDir := os.Getenv("XDG_CONFIG_HOME")
+		if configDir == "" {
+			configDir = filepath.Join(home, ".config")
+		}
+		return filepath.Join(configDir, "cursor", "auth.json")
+	}
 }
 
 type cursorAgentEvent struct {
