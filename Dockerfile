@@ -7,7 +7,9 @@ COPY Cli-Proxy-API-Management-Center/package*.json ./
 RUN npm ci --silent
 
 COPY Cli-Proxy-API-Management-Center/ ./
-RUN npm run build
+RUN npm run build && \
+    ls -lh /frontend/dist/ && \
+    echo "Frontend build completed, dist size: $(du -sh /frontend/dist | cut -f1)"
 
 # Go builder stage
 FROM golang:1.26-alpine AS builder
@@ -42,11 +44,18 @@ RUN ARCH="$(uname -m)" && \
 
 ENV PATH="/root/.local/bin:${PATH}"
 
+# Set management panel path explicitly for container environment
+ENV MANAGEMENT_STATIC_PATH="/CLIProxyAPI/Cli-Proxy-API-Management-Center/dist/index.html"
+
 RUN mkdir -p /CLIProxyAPI/Cli-Proxy-API-Management-Center/dist
 
 COPY --from=builder /app/CLIProxyAPI /CLIProxyAPI/CLIProxyAPI
 
 COPY --from=frontend-builder /frontend/dist/index.html /CLIProxyAPI/Cli-Proxy-API-Management-Center/dist/index.html
+
+# Verify the file was copied successfully
+RUN ls -lh /CLIProxyAPI/Cli-Proxy-API-Management-Center/dist/index.html && \
+    echo "Management panel size: $(du -h /CLIProxyAPI/Cli-Proxy-API-Management-Center/dist/index.html | cut -f1)"
 
 COPY config.example.yaml /CLIProxyAPI/config.example.yaml
 
