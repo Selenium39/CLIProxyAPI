@@ -44,9 +44,6 @@ RUN ARCH="$(uname -m)" && \
 
 ENV PATH="/root/.local/bin:${PATH}"
 
-# Set management panel path explicitly for container environment
-ENV MANAGEMENT_STATIC_PATH="/CLIProxyAPI/Cli-Proxy-API-Management-Center/dist/index.html"
-
 RUN mkdir -p /CLIProxyAPI/Cli-Proxy-API-Management-Center/dist
 
 COPY --from=builder /app/CLIProxyAPI /CLIProxyAPI/CLIProxyAPI
