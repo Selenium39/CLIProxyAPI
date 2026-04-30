@@ -161,7 +161,9 @@ func StaticDir(configFilePath string) string {
 }
 
 // FilePath resolves the absolute path to the management control panel asset.
-// Priority: 1) MANAGEMENT_STATIC_PATH env var, 2) local frontend project dist, 3) static directory.
+// Priority: 1) MANAGEMENT_STATIC_PATH env var, 2) local frontend project dist
+// (relative to config file, working directory, or executable directory),
+// 3) static directory.
 func FilePath(configFilePath string) string {
 	if override := strings.TrimSpace(os.Getenv("MANAGEMENT_STATIC_PATH")); override != "" {
 		cleaned := filepath.Clean(override)
@@ -171,7 +173,19 @@ func FilePath(configFilePath string) string {
 		return filepath.Join(cleaned, ManagementFileName)
 	}
 
-	// Check local frontend project first
+	// Helper to check local frontend project at a given base directory.
+	tryLocalFrontend := func(base string) string {
+		if base == "" {
+			return ""
+		}
+		localFrontendPath := filepath.Join(base, "Cli-Proxy-API-Management-Center", "dist", "index.html")
+		if _, err := os.Stat(localFrontendPath); err == nil {
+			return localFrontendPath
+		}
+		return ""
+	}
+
+	// 1) Relative to config file.
 	configFilePath = strings.TrimSpace(configFilePath)
 	if configFilePath != "" {
 		base := filepath.Dir(configFilePath)
@@ -179,10 +193,22 @@ func FilePath(configFilePath string) string {
 		if err == nil && fileInfo.IsDir() {
 			base = configFilePath
 		}
+		if p := tryLocalFrontend(base); p != "" {
+			return p
+		}
+	}
 
-		localFrontendPath := filepath.Join(base, "Cli-Proxy-API-Management-Center", "dist", "index.html")
-		if _, err := os.Stat(localFrontendPath); err == nil {
-			return localFrontendPath
+	// 2) Relative to working directory.
+	if wd, err := os.Getwd(); err == nil {
+		if p := tryLocalFrontend(wd); p != "" {
+			return p
+		}
+	}
+
+	// 3) Relative to executable directory.
+	if exePath, err := os.Executable(); err == nil {
+		if p := tryLocalFrontend(filepath.Dir(exePath)); p != "" {
+			return p
 		}
 	}
 
