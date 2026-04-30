@@ -25,6 +25,7 @@ import (
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/auth/antigravity"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/auth/claude"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/auth/codex"
+	cursorAuth "github.com/router-for-me/CLIProxyAPI/v6/internal/auth/cursor"
 	geminiAuth "github.com/router-for-me/CLIProxyAPI/v6/internal/auth/gemini"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/auth/kimi"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/interfaces"
@@ -2176,6 +2177,61 @@ func (h *Handler) RequestKimiToken(c *gin.Context) {
 	}()
 
 	c.JSON(200, gin.H{"status": "ok", "url": authURL, "state": state})
+}
+
+func (h *Handler) RequestCursorToken(c *gin.Context) {
+	ctx := context.Background()
+	ctx = PopulateAuthContext(ctx, c)
+
+	fmt.Println("Initializing Cursor authentication...")
+
+	auth := cursorAuth.NewCursorAuth(h.cfg)
+
+	session, err := auth.GenerateLoginSession()
+	if err != nil {
+		log.Errorf("Failed to generate Cursor login session: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate login session"})
+		return
+	}
+
+	state := fmt.Sprintf("cur-%d", time.Now().UnixNano())
+	RegisterOAuthSession(state, "cursor")
+
+	go func() {
+		fmt.Println("Waiting for Cursor authentication...")
+		bundle, errPoll := auth.PollForToken(ctx, session)
+		if errPoll != nil {
+			SetOAuthSessionError(state, "Authentication failed")
+			fmt.Printf("Cursor authentication failed: %v\n", errPoll)
+			return
+		}
+
+		tokenStorage := auth.CreateTokenStorage(bundle)
+		fileName := cursorAuth.CredentialFileName(tokenStorage.Email)
+		record := &coreauth.Auth{
+			ID:       fileName,
+			Provider: "cursor",
+			FileName: fileName,
+			Label:    "Cursor User",
+			Storage:  tokenStorage,
+			Metadata: map[string]any{
+				"email":   tokenStorage.Email,
+				"auth_id": tokenStorage.AuthID,
+			},
+		}
+		savedPath, errSave := h.saveTokenRecord(ctx, record)
+		if errSave != nil {
+			log.Errorf("Failed to save Cursor authentication tokens: %v", errSave)
+			SetOAuthSessionError(state, "Failed to save authentication tokens")
+			return
+		}
+
+		fmt.Printf("Cursor authentication successful! Token saved to %s\n", savedPath)
+		CompleteOAuthSession(state)
+		CompleteOAuthSessionsByProvider("cursor")
+	}()
+
+	c.JSON(200, gin.H{"status": "ok", "url": session.LoginURL, "state": state})
 }
 
 type projectSelectionRequiredError struct{}

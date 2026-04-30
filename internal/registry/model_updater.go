@@ -124,6 +124,9 @@ func tryRefreshModels(ctx context.Context, label string) {
 	// Detect changes before updating store.
 	changed := detectChangedProviders(oldData, parsed)
 
+	// Preserve locally-defined providers that remote models.json may not include yet.
+	preserveLocalOnlyProviders(oldData, parsed)
+
 	// Update store with new data regardless.
 	modelsCatalogStore.mu.Lock()
 	modelsCatalogStore.data = parsed
@@ -215,6 +218,7 @@ func detectChangedProviders(oldData, newData *staticModelsJSON) []string {
 		{"codex", oldData.CodexPro, newData.CodexPro},
 		{"kimi", oldData.Kimi, newData.Kimi},
 		{"antigravity", oldData.Antigravity, newData.Antigravity},
+		{"cursor", oldData.Cursor, newData.Cursor},
 	}
 
 	seen := make(map[string]bool, len(sections))
@@ -232,6 +236,17 @@ func detectChangedProviders(oldData, newData *staticModelsJSON) []string {
 }
 
 // modelSectionChanged reports whether two model slices differ.
+// preserveLocalOnlyProviders copies provider model slices from old into new
+// when the remote JSON did not include them (nil/empty in new but populated locally).
+func preserveLocalOnlyProviders(old, new *staticModelsJSON) {
+	if old == nil || new == nil {
+		return
+	}
+	if len(new.Cursor) == 0 && len(old.Cursor) > 0 {
+		new.Cursor = old.Cursor
+	}
+}
+
 func modelSectionChanged(a, b []*ModelInfo) bool {
 	if len(a) != len(b) {
 		return true

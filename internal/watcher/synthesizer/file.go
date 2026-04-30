@@ -169,6 +169,12 @@ func synthesizeFileAuths(ctx *SynthesisContext, fullPath string, data []byte) []
 			}
 		}
 	}
+	if provider == "cursor" {
+		a.Attributes["base_url"] = "https://api2.cursor.sh/v1"
+		if accessToken, ok := metadata["access_token"].(string); ok && strings.TrimSpace(accessToken) != "" {
+			a.Attributes["api_key"] = accessToken
+		}
+	}
 	if provider == "gemini-cli" {
 		if virtuals := SynthesizeGeminiVirtualAuths(a, metadata, now); len(virtuals) > 0 {
 			for _, v := range virtuals {
