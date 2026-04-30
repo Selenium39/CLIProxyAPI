@@ -26,10 +26,6 @@ ARG BUILD_DATE=unknown
 
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X 'main.Version=${VERSION}' -X 'main.Commit=${COMMIT}' -X 'main.BuildDate=${BUILD_DATE}'" -o ./CLIProxyAPI ./cmd/server/
 
-# Copy frontend build to static directory
-RUN mkdir -p ./static
-COPY --from=frontend-builder /frontend/dist/index.html ./static/management.html
-
 FROM alpine:3.22.0
 
 RUN apk add --no-cache tzdata bash curl libstdc++ libgcc
@@ -46,11 +42,11 @@ RUN ARCH="$(uname -m)" && \
 
 ENV PATH="/root/.local/bin:${PATH}"
 
-RUN mkdir /CLIProxyAPI
+RUN mkdir -p /CLIProxyAPI/Cli-Proxy-API-Management-Center/dist
 
-COPY --from=builder ./app/CLIProxyAPI /CLIProxyAPI/CLIProxyAPI
+COPY --from=builder /app/CLIProxyAPI /CLIProxyAPI/CLIProxyAPI
 
-COPY --from=builder ./app/static /CLIProxyAPI/static
+COPY --from=frontend-builder /frontend/dist/index.html /CLIProxyAPI/Cli-Proxy-API-Management-Center/dist/index.html
 
 COPY config.example.yaml /CLIProxyAPI/config.example.yaml
 
