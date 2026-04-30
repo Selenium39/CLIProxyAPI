@@ -30,7 +30,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X 'main.Version=${VERSION
 
 FROM alpine:3.22.0
 
-RUN apk add --no-cache tzdata bash curl libstdc++ libgcc
+RUN apk add --no-cache tzdata bash curl libstdc++ libgcc gcompat
 
 # Install cursor-agent CLI
 ARG CURSOR_AGENT_VERSION=2026.04.29-c83a488
