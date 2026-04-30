@@ -1,3 +1,15 @@
+# Frontend builder stage
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /frontend
+
+COPY Cli-Proxy-API-Management-Center/package*.json ./
+RUN npm ci --silent
+
+COPY Cli-Proxy-API-Management-Center/ ./
+RUN npm run build
+
+# Go builder stage
 FROM golang:1.26-alpine AS builder
 
 WORKDIR /app
@@ -13,6 +25,10 @@ ARG COMMIT=none
 ARG BUILD_DATE=unknown
 
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X 'main.Version=${VERSION}' -X 'main.Commit=${COMMIT}' -X 'main.BuildDate=${BUILD_DATE}'" -o ./CLIProxyAPI ./cmd/server/
+
+# Copy frontend build to static directory
+RUN mkdir -p ./static
+COPY --from=frontend-builder /frontend/dist/index.html ./static/management.html
 
 FROM alpine:3.22.0
 

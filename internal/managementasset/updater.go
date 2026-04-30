@@ -161,6 +161,7 @@ func StaticDir(configFilePath string) string {
 }
 
 // FilePath resolves the absolute path to the management control panel asset.
+// Priority: 1) MANAGEMENT_STATIC_PATH env var, 2) local frontend project dist, 3) static directory.
 func FilePath(configFilePath string) string {
 	if override := strings.TrimSpace(os.Getenv("MANAGEMENT_STATIC_PATH")); override != "" {
 		cleaned := filepath.Clean(override)
@@ -170,6 +171,22 @@ func FilePath(configFilePath string) string {
 		return filepath.Join(cleaned, ManagementFileName)
 	}
 
+	// Check local frontend project first
+	configFilePath = strings.TrimSpace(configFilePath)
+	if configFilePath != "" {
+		base := filepath.Dir(configFilePath)
+		fileInfo, err := os.Stat(configFilePath)
+		if err == nil && fileInfo.IsDir() {
+			base = configFilePath
+		}
+
+		localFrontendPath := filepath.Join(base, "Cli-Proxy-API-Management-Center", "dist", "index.html")
+		if _, err := os.Stat(localFrontendPath); err == nil {
+			return localFrontendPath
+		}
+	}
+
+	// Fall back to static directory
 	dir := StaticDir(configFilePath)
 	if dir == "" {
 		return ""
